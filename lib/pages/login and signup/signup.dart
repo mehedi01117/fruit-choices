@@ -1,11 +1,13 @@
-import 'dart:convert';
 import 'dart:ui';
+import 'package:appwrite/appwrite.dart';
+import 'package:appwrite/models.dart' as models;
 import 'package:flutter/material.dart';
+import 'package:fruit_choices/main.dart';
 import 'package:fruit_choices/pages/login%20and%20signup/login.dart';
 import 'package:fruit_choices/pages/login%20and%20signup/mytextfile.dart';
 import 'package:get/get.dart';
 import 'package:get/get_core/src/get_main.dart';
-import 'package:http/http.dart' as http;
+import 'package:hive/hive.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -20,81 +22,75 @@ class _SignupScreenState extends State<SignupScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
 
-  final String baseUrl = "https://fruit-backed.vercel.app/api";
-
   void _handleSignup() async {
-    if (_nameController.text.trim().isEmpty ||
-        _emailController.text.trim().isEmpty ||
-        _passwordController.text.trim().isEmpty) {
+    final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (name.isEmpty || email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please fill in all the fields.")),
+      );
+      return;
+    }
+    if (password.length < 8) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("দয়া করে নাম, ইমেইল এবং পাসওয়ার্ড লিখুন"),
+          content: Text("Password must be at least 8 characters long."),
         ),
       );
       return;
     }
-
     setState(() {
       _isLoading = true;
     });
-
     try {
-      final url = Uri.parse('$baseUrl/signup');
-      print("Sending data to: $url");
+      final Account account = Account(client);
+      final Databases databases = Databases(client);
 
-      final response = await http
-          .post(
-            url,
-            headers: {"Content-Type": "application/json"},
+      models.User user = await account.create(
+        userId: ID.unique(),
+        email: email,
+        password: password,
+        name: name,
+      );
+      print("Auth Account Created. ID: ${user.$id}");
 
-            body: jsonEncode({
-              "name": _nameController.text.trim(),
-              "email": _emailController.text.trim(),
-              "password": _passwordController.text.trim(),
-            }),
-          )
-          .timeout(const Duration(seconds: 15));
+      await databases.createDocument(
+        databaseId: "6a297e78001c34c4281f",
+        collectionId: "users",
+        documentId: user.$id,
+        data: {"name": name, "email": email},
+      );
 
-      print("Vercel Response Status: ${response.statusCode}");
-      print("Vercel Response Body: ${response.body}");
-
-      final responseData = jsonDecode(response.body);
+      await account.createEmailPasswordSession(
+        email: email,
+        password: password,
+      );
+      var authBox = await Hive.openBox('authBox');
+      await authBox.put('isloggedin', true);
+      await authBox.put('user_name', name);
+      await authBox.put('user_email', email);
 
       setState(() {
         _isLoading = false;
       });
 
-      if (response.statusCode == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              responseData['message'] ?? "রেজিস্ট্রেশন সফল হয়েছে!",
-            ),
-            backgroundColor: Colors.green,
-          ),
-        );
-
-        _nameController.clear();
-        _emailController.clear();
-        _passwordController.clear();
-        Get.off(() => Login());
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(responseData['error'] ?? "plase try again"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Signup successful!")));
+      _nameController.clear();
+      _emailController.clear();
+      _passwordController.clear();
+      Get.offAll(() => const Login());
+    } catch (error) {
       setState(() {
         _isLoading = false;
       });
-      print("Catch Error: $e");
+      print("Appwrite Actual Error: $error");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("connection error ${e.toString()}"),
-          backgroundColor: Colors.red,
+          content: Text(error.toString().replaceAll("AppwriteException:", "")),
         ),
       );
     }
@@ -102,7 +98,6 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   void dispose() {
-    // ৫. পরিবর্তন: নেম কন্ট্রোলার ডিসপোজ করা হয়েছে
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -117,32 +112,12 @@ class _SignupScreenState extends State<SignupScreen> {
           Container(
             decoration: const BoxDecoration(
               image: DecorationImage(
-                image: AssetImage("assets/background.jpg"),
+                image: AssetImage("assets/login.jpg"),
                 fit: BoxFit.cover,
               ),
             ),
           ),
-          Positioned(
-            top: 50,
-            left: 80,
-            right: 0,
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 24.0, vertical: 10.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "Signup Page",
-                    style: TextStyle(
-                      fontSize: 28,
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+
           Center(
             child: SingleChildScrollView(
               child: Padding(
@@ -156,7 +131,10 @@ class _SignupScreenState extends State<SignupScreen> {
 
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(width: 2),
+                        border: Border.all(
+                          width: 2,
+                          color: const Color.fromARGB(122, 255, 255, 255),
+                        ),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),

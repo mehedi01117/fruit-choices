@@ -33,7 +33,10 @@ class _MytextfileState extends State<Mytextfile> {
           color: Color.fromARGB(255, 255, 255, 255),
         ),
 
-        labelStyle: const TextStyle(color: Color.fromARGB(255, 255, 255, 255)),
+        labelStyle: const TextStyle(
+          color: Color.fromARGB(255, 255, 255, 255),
+          fontSize: 20,
+        ),
         focusedBorder: const UnderlineInputBorder(
           borderSide: BorderSide(
             color: Color.fromARGB(129, 247, 247, 247),
